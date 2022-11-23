@@ -12,4 +12,8 @@ impl Screen {
     pub fn clear(&self) {
         println!("clear");
     }
+
+    pub fn draw_pixel(&mut self, x: u16, y: u16) -> bool {
+        false
+    }
 }
