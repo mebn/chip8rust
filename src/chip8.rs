@@ -9,11 +9,11 @@ pub struct Chip8 {
     stack: [u16; 16],
     delay_timer: u16,
     sound_timer: u16,
-    // screen: screen::Screen
+    screen: screen::Screen
 }
 
 impl Chip8 {
-    pub fn new() -> Self {
+    pub fn new(screen: screen::Screen) -> Self {
         Self {
             memory: [0; 4096],
             v: [0; 16],
@@ -23,10 +23,10 @@ impl Chip8 {
             stack: [0; 16],
             delay_timer: 0,
             sound_timer: 0,
-            // screen: screen::Screen {  }
+            screen
         }
     }
-    pub fn init_font(&mut self) {
+    fn init_font(&mut self) {
         // use memory position 0x000 to 0x1FF to store font
         let sprites = [
             0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -52,7 +52,7 @@ impl Chip8 {
         }
     }
 
-    pub fn handle_instruction(&mut self, instr: u16) {
+    fn handle_instruction(&mut self, instr: u16) {
         self.pc += 2; // each instruction is 2 bytes long
 
         let x = (instr & 0x0F00) >> 8;
@@ -66,7 +66,8 @@ impl Chip8 {
                 0x0EE => {
                     self.pc = self.stack[self.sp as usize];
                     self.sp -= 1;
-                }
+                },
+                _ => {}
             },
             // 1nnn - JP addr
             0x1 => self.pc = instr & 0x0FFF,
@@ -102,7 +103,55 @@ impl Chip8 {
                 // 8xy3 - XOR Vx, Vy
                 0x3 => self.v[x as usize] ^= self.v[y as usize],
                 // 8xy4 - ADD Vx, Vy
-                // 0x4 => 
+                0x4 => {
+                    let sum = self.v[x as usize] as u16 + self.v[y as usize] as u16;
+                    self.v[x as usize] = (sum & 0x00FF) as u8;
+                    self.v[0xF] = 0;
+                    if sum > 0xFF {
+                        self.v[0xF] = 1;
+                    }
+                },
+                // 8xy5 - SUB Vx, Vy
+                0x5 => {
+                    self.v[0xF] = 0;
+                    if self.v[x as usize] > self.v[y as usize] {
+                        self.v[0xF] = 1;
+                    }
+                    self.v[x as usize] -= self.v[y as usize];
+                },
+                // 8xy6 - SHR Vx {, Vy}
+                0x6 => {
+                    self.v[0xF] = self.v[x as usize] & 0x1;
+                    self.v[x as usize] >>= 1;
+                },
+                // 8xy7 - SUBN Vx, Vy
+                0x7 => {
+                    self.v[0xF] = 0;
+                    if self.v[y as usize] > self.v[x as usize] {
+                        self.v[0xF] = 1;
+                    }
+                    self.v[x as usize] = self.v[y as usize] - self.v[x as usize];
+                },
+                // 8xyE - SHL Vx {, Vy}
+                0xE => {
+                    self.v[0xF] = self.v[x as usize] & 0x80;
+                    self.v[x as usize] <<= 1;
+                 },
+                _ => {}
+            },
+            // 9xy0 - SNE Vx, Vy
+            0x9 => if self.v[x as usize] != self.v[y as usize] {
+                self.pc += 2;
+            },
+            // Annn - LD I, addr
+            0xA => self.i = instr & 0xFFF,
+            // Bnnn - JP V0, addr
+            0xB => self.pc = (instr & 0xFFF) + self.v[0] as u16,
+            // Cxkk - RND Vx, byte
+            0xC => {
+                use rand::Rng;
+                let rand = rand::thread_rng().gen_range(0..=255);
+                self.v[x as usize] = rand & (instr & 0xFF) as u8;
             },
             _ => {}
         }
