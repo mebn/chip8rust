@@ -3,6 +3,11 @@ pub struct Controls {
 }
 
 impl Controls {
+    pub fn new() -> Self {
+        Self {
+
+        }
+    }
     pub fn is_key_pressed(&self, key: u8) -> bool {
         false
     }

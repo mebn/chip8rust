@@ -27,6 +27,14 @@ fn app() -> Html {
 }
 
 fn main() {
+    let screen = screen::Screen::new();
+    let controls = controls::Controls::new();
+    let chip8 = chip8::Chip8::new(screen, controls);
+
+    // chip8.load_rom(x);
+    // chip8.system_loop(60);
+
+    // this should go in screen, after I get it to work
     yew::Renderer::<App>::new().render();
 
     let document = web_sys::window().unwrap().document().unwrap();
