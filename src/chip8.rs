@@ -11,12 +11,13 @@ pub struct Chip8 {
     sound_timer: u8,
     is_paused: bool,
     screen: screen::Screen,
-    controls: controls::Controls
+    controls: controls::Controls,
+    batch_size: u32
 }
 
 impl Chip8 {
     pub fn new(screen: screen::Screen, controls: controls::Controls) -> Self {
-        Self {
+        let mut chip8 = Chip8 {
             memory: [0; 4096],
             v: [0; 16],
             i: 0,
@@ -27,9 +28,44 @@ impl Chip8 {
             sound_timer: 0,
             is_paused: false,
             screen,
-            controls
+            controls,
+            batch_size: 10
+        };
+
+        chip8.init_font();
+
+        chip8
+    }
+
+    pub fn load_rom(&mut self, rom: Vec<u16>) {
+        // chip-8 programs stored in 0x200 - 0xFFF
+        for (i, &instr) in rom.iter().enumerate() {
+            self.memory[0x200 + i] = instr;
         }
     }
+
+    pub fn system_loop(&mut self, fps: u32) {
+        loop {
+            if self.is_paused { continue; };
+
+            let instr = self.memory[self.pc as usize] << 8 | self.memory[self.pc as usize + 1];
+            self.handle_instruction(instr);
+
+            self.update_timers();
+            self.screen.draw();
+            // sound
+
+            let ms = (1000.0 / fps as f64) as u64;
+            std::thread::sleep(std::time::Duration::from_millis(ms));
+        }
+    }
+
+    fn update_timers(&mut self) {
+        let decr = |timer: &mut u8| if *timer > 0 { *timer -= 1 };
+        decr(&mut self.sound_timer);
+        decr(&mut self.delay_timer);
+    }
+
     fn init_font(&mut self) {
         // use memory position 0x000 to 0x1FF to store font
         let sprites = [
@@ -140,7 +176,7 @@ impl Chip8 {
                 0xE => {
                     self.v[0xF] = self.v[x] & 0x80;
                     self.v[x] <<= 1;
-                 },
+                },
                 _ => {}
             },
             // 9xy0 - SNE Vx, Vy
