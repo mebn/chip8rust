@@ -37,23 +37,32 @@ impl Chip8 {
         chip8
     }
 
-    pub fn load_rom(&mut self, rom: Vec<u16>) {
+    pub fn load_rom(&mut self, rom: Vec<u8>) {
         // chip-8 programs stored in 0x200 - 0xFFF
         for (i, &instr) in rom.iter().enumerate() {
-            self.memory[0x200 + i] = instr;
+            self.memory[0x200 + i] = instr as u16;
         }
+    }
+
+    pub fn cycle(&mut self) {
+        if self.is_paused { return; };
+
+        let instr = self.memory[self.pc as usize] << 8 | self.memory[self.pc as usize + 1];
+        self.handle_instruction(instr);
+
+        self.update_timers();
+        self.screen.draw();
     }
 
     pub fn system_loop(&mut self, fps: u32) {
         loop {
-            if self.is_paused { continue; };
+            if self.is_paused { return; };
 
             let instr = self.memory[self.pc as usize] << 8 | self.memory[self.pc as usize + 1];
             self.handle_instruction(instr);
 
             self.update_timers();
             self.screen.draw();
-            // sound
 
             let ms = (1000.0 / fps as f64) as u64;
             std::thread::sleep(std::time::Duration::from_millis(ms));
