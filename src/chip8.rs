@@ -9,10 +9,9 @@ pub struct Chip8 {
     stack: [u16; 16],
     delay_timer: u8,
     sound_timer: u8,
-    is_paused: bool,
+    pub is_paused: bool,
     screen: screen::Screen,
     controls: controls::Controls,
-    batch_size: u32
 }
 
 impl Chip8 {
@@ -29,7 +28,6 @@ impl Chip8 {
             is_paused: false,
             screen,
             controls,
-            batch_size: 10
         };
 
         chip8.init_font();
@@ -52,21 +50,6 @@ impl Chip8 {
 
         self.update_timers();
         self.screen.draw();
-    }
-
-    pub fn system_loop(&mut self, fps: u32) {
-        loop {
-            if self.is_paused { return; };
-
-            let instr = self.memory[self.pc as usize] << 8 | self.memory[self.pc as usize + 1];
-            self.handle_instruction(instr);
-
-            self.update_timers();
-            self.screen.draw();
-
-            let ms = (1000.0 / fps as f64) as u64;
-            std::thread::sleep(std::time::Duration::from_millis(ms));
-        }
     }
 
     fn update_timers(&mut self) {
@@ -108,41 +91,41 @@ impl Chip8 {
         let y = ((instr & 0x00F0) >> 4) as usize;
 
         match instr & 0xF000 {
-            0x0 => match instr {
+            0x0000 => match instr {
                 // 00E0 - CLS
-                0x00E0 => self.screen.clear(),
+                0xE0 => self.screen.clear(),
                 // 00EE - RET
-                0x0EE => {
+                0xEE => {
                     self.pc = self.stack[self.sp as usize];
                     self.sp -= 1;
                 },
                 _ => {}
             },
             // 1nnn - JP addr
-            0x1 => self.pc = instr & 0x0FFF,
+            0x1000 => self.pc = instr & 0xFFF,
             // 2nnn - CALL addr
-            0x2 => {
+            0x2000 => {
                 self.sp += 1;
                 self.stack[self.sp as usize] = self.pc;
-                self.pc = instr & 0x0FFF;
+                self.pc = instr & 0xFFF;
             },
             // 3xkk - SE Vx, byte
-            0x3 => if self.v[x] as u16 == (instr & 0x00FF) {
+            0x3000 => if self.v[x] as u16 == (instr & 0xFF) {
                 self.pc += 2;
             },
             // 4xkk - SNE Vx, byte
-            0x4 => if self.v[self.sp as usize] as u16 != (instr & 0x00FF) {
+            0x4000 => if self.v[x] as u16 != (instr & 0xFF) {
                 self.pc += 2;
             },
             // 5xy0 - SE Vx, Vy
-            0x5 => if x == y {
+            0x5000 => if self.v[x] == self.v[y] {
                 self.pc += 2;
             },
             // 6xkk - LD Vx, byte
-            0x6 => self.v[x] = (instr & 0xFF) as u8,
+            0x6000 => self.v[x] = (instr & 0xFF) as u8,
             // 7xkk - ADD Vx, byte
-            0x7 => self.v[x] += (instr & 0xFF) as u8,
-            0x8 => match instr & 0xF {
+            0x7000 => self.v[x] += (instr & 0xFF) as u8,
+            0x8000 => match instr & 0xF {
                 // 8xy0 - LD Vx, Vy
                 0x0 => self.v[x] = self.v[y],
                 // 8xy1 - OR Vx, Vy
@@ -154,7 +137,7 @@ impl Chip8 {
                 // 8xy4 - ADD Vx, Vy
                 0x4 => {
                     let sum = self.v[x] as u16 + self.v[y] as u16;
-                    self.v[x] = (sum & 0x00FF) as u8;
+                    self.v[x] = sum as u8;
                     self.v[0xF] = 0;
                     if sum > 0xFF {
                         self.v[0xF] = 1;
@@ -189,32 +172,32 @@ impl Chip8 {
                 _ => {}
             },
             // 9xy0 - SNE Vx, Vy
-            0x9 => if self.v[x] != self.v[y] {
+            0x9000 => if self.v[x] != self.v[y] {
                 self.pc += 2;
             },
             // Annn - LD I, addr
-            0xA => self.i = instr & 0xFFF,
+            0xA000 => self.i = instr & 0xFFF,
             // Bnnn - JP V0, addr
-            0xB => self.pc = (instr & 0xFFF) + self.v[0] as u16,
+            0xB000 => self.pc = (instr & 0xFFF) + self.v[0] as u16,
             // Cxkk - RND Vx, byte
-            0xC => {
+            0xC000 => {
                 use rand::Rng;
                 let rand = rand::thread_rng().gen_range(0..=255);
                 self.v[x] = rand & (instr & 0xFF) as u8;
             },
             // Dxyn - DRW Vx, Vy, nibble
-            0xD => {
+            0xD000 => {
                 self.v[0xF] = 0;
 
                 for row in 0..(instr & 0xF) {
                     for col in 0..8 {
-                        if self.screen.draw_pixel(self.v[x] as u16 + col, self.v[y] as u16 + row) {
+                        if self.screen.set_pixel(self.v[x] as u16 + col, self.v[y] as u16 + row) {
                             self.v[0xF] = 1;
                         }
                     }
                 }
             },
-            0xE => match instr & 0xFF {
+            0xE000 => match instr & 0xFF {
                 // Ex9E - SKP Vx
                 0x9E => if self.controls.is_key_pressed(self.v[x]) {
                     self.pc += 2;
@@ -225,11 +208,11 @@ impl Chip8 {
                 },
                 _ => {}
             },
-            0xF => match instr & 0xFF {
+            0xF000 => match instr & 0xFF {
                 // Fx07 - LD Vx, DT
-                0x07 => self.v[x] = self.delay_timer,
+                0x7 => self.v[x] = self.delay_timer,
                 // Fx0A - LD Vx, K
-                0x0A => {
+                0xA => {
                     self.is_paused = true;
                     self.controls.on_key_press(|key| {
                         self.v[x] = key;
