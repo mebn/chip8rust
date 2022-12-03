@@ -6,21 +6,19 @@ use crossterm::{
 
 use tui::{
     backend::CrosstermBackend,
-    widgets::{Block, Borders},
+    widgets::Block,
     layout::Rect,
     style::{Color, Style},
     Terminal,
 };
 
-const WIDTH: usize = 32;
-const HEIGHT: usize = 64;
+const WIDTH: usize = 64;
+const HEIGHT: usize = 32;
 
 pub struct Screen {
     pub terminal: Terminal<CrosstermBackend<std::io::Stdout>>,
     scale: u32,
-    width: usize,
-    height: usize,
-    pub screen: [[u8; HEIGHT]; WIDTH],
+    pub screen: [[u8; WIDTH]; HEIGHT],
 }
 
 impl Screen {
@@ -29,10 +27,8 @@ impl Screen {
 
         Ok(Self {
             terminal,
-            scale: 4,
-            width: WIDTH,
-            height: HEIGHT,
-            screen: [[0; HEIGHT]; WIDTH],
+            scale: 1,
+            screen: [[0; WIDTH]; HEIGHT],
         })
     }
 
@@ -46,7 +42,7 @@ impl Screen {
         Ok(terminal)
     }
 
-    pub fn restore_terminal(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn restore_terminal(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         disable_raw_mode()?;
         execute!(
             self.terminal.backend_mut(),
@@ -62,20 +58,27 @@ impl Screen {
         self.terminal.draw(|f| {
             f.render_widget(Block::default().style(Style::default().bg(Color::Black)), f.size());
 
-            for x in 0..WIDTH {
-                for y in 0..HEIGHT {
-                    if self.screen[x][y] != 1 { continue; }
-                    let size = Rect::new(x as u16, y as u16, self.scale as u16, self.scale as u16);
+            for y in 0..HEIGHT {
+                for x in 0..WIDTH {
+                    if self.screen[y][x] != 1 { continue; }
+
                     let block = Block::default().style(Style::default().bg(Color::White));
+                    let size = Rect::new(
+                        x as u16 * self.scale as u16 * 2,
+                        y as u16 * self.scale as u16,
+                        self.scale as u16 * 2,
+                        self.scale as u16
+                    );
+
                     f.render_widget(block, size);
                 }
             }
         }).unwrap();
     }
 
-    pub fn draw_pixel(&mut self, x: u16,  y: u16) -> bool {
-        let x = (x % WIDTH as u16) as usize;
-        let y = (y % HEIGHT as u16) as usize;
+    pub fn set_pixel(&mut self, x: u16,  y: u16) -> bool {
+        let x = x as usize % WIDTH as usize;
+        let y = y as usize % HEIGHT as usize;
 
         self.screen[y][x] ^= 1;
 
@@ -83,6 +86,12 @@ impl Screen {
     }
 
     pub fn clear(&mut self) {
-        self.screen = [[0; HEIGHT]; WIDTH];
+        self.screen = [[0; WIDTH]; HEIGHT];
+    }
+}
+
+impl std::ops::Drop for Screen {
+    fn drop(&mut self) {
+        self.restore_terminal().unwrap();
     }
 }
